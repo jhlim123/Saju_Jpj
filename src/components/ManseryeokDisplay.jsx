@@ -1,12 +1,53 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { getTenGods, getTwelveStages, getElementClass, getElementColor, calculateInternationalAge, calculateDaewun } from '../utils/sajuLogic';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../utils/translations';
+import { determineGyeok, analyzeGyeokSungPae, determineYongshin, analyzeLuckAndGyeok } from '../utils/jpjLogic';
+
+// 성패 배지
+const EFFECT_BADGE = {
+  '대길(大吉)': { bg: '#1b5e20', color: '#fff', short: '대길' },
+  '길(吉)':     { bg: '#0d47a1', color: '#fff', short: '길'   },
+  '평(平)':     { bg: '#757575', color: '#fff', short: '평'   },
+  '흉(凶)':     { bg: '#b71c1c', color: '#fff', short: '흉'   },
+};
+const EffectBadge = ({ effect, dim }) => {
+  if (!effect) return null;
+  const s = EFFECT_BADGE[effect] || EFFECT_BADGE['평(平)'];
+  return (
+    <span style={{
+      display: 'inline-block', padding: '1px 6px',
+      borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700',
+      background: dim ? '#ccc' : s.bg,
+      color: dim ? '#888' : s.color,
+      marginTop: '2px', letterSpacing: '0.3px', opacity: dim ? 0.6 : 1
+    }}>{s.short}</span>
+  );
+};
 
 export default function ManseryeokDisplay({ sajuData, userInfo, selectedDaewunAge, onSelectDaewun, onShowCreatorInfo }) {
   const { language } = useLanguage();
   const t = translations[language];
   const activeDaewunRef = useRef(null);
+
+  // 자평진전 성패 계산 — hooks는 early return 전에 선언
+  const jpjBase = useMemo(() => {
+    if (!sajuData?.dayPillarHanja?.[0]) return null;
+    try {
+      const gyeokInfo = { ...determineGyeok(sajuData), gyeokStatus: '' };
+      const sungPae = analyzeGyeokSungPae(sajuData, gyeokInfo);
+      gyeokInfo.gyeokStatus = sungPae.status;
+      const yongshinInfo = determineYongshin(sajuData, gyeokInfo, sungPae);
+      return { gyeokInfo, yongshinInfo };
+    } catch { return null; }
+  }, [sajuData]);
+
+  const getDaewunEffect = (stem, branch) => {
+    if (!jpjBase || !stem || !branch) return null;
+    try {
+      return analyzeLuckAndGyeok(sajuData, jpjBase.gyeokInfo, jpjBase.yongshinInfo, `${stem}${branch}`, '대운');
+    } catch { return null; }
+  };
 
   if (!sajuData || !userInfo) return null;
 
@@ -166,6 +207,7 @@ export default function ManseryeokDisplay({ sajuData, userInfo, selectedDaewunAg
                       <span className="selected-luck-tag">{language === 'ko' ? '선택' : 'Select'}</span>
                     ) : null}
                     {dw.age}<br/>
+                    <EffectBadge effect={getDaewunEffect(dw.stem, dw.branch)?.effect} dim={!isCurrent && !isSelected} /><br/>
                     <span style={{ color: (isCurrent || isSelected) ? getElementColor(dw.stem) : '#aaa', fontSize: '0.8rem', fontWeight: (isCurrent || isSelected) ? '700' : '400' }}>
                       {getTenGods(dayStem, dw.stem)}
                     </span>
