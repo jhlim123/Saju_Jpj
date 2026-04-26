@@ -1,4 +1,4 @@
-import { getInterpretation, getCurrentLuckInterpretation, getElementClass } from '../utils/sajuLogic';
+import { getInterpretation, getCurrentLuckInterpretation, getElementClass, calculateWolun } from '../utils/sajuLogic';
 import { getPersonalityAnalysis } from '../utils/personalityLogic';
 import { getFullAnalysis } from '../utils/fullAnalysis';
 import { generateExpertPrompt } from '../utils/aiPromptGenerator';
@@ -7,6 +7,91 @@ import JpjSection from './interpretation/JpjSection';
 import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations, translateTenGods } from '../utils/translations';
+
+// ── 자평진전 절운 12개월 인라인 컴포넌트 ──
+const EFFECT_STYLE = {
+  '대길(大吉)': { bg: '#e8f5e9', border: '#4caf50', text: '#1b5e20', badge: '대길 ★' },
+  '길(吉)':     { bg: '#e3f2fd', border: '#2196f3', text: '#0d47a1', badge: '길 ▲' },
+  '평(平)':     { bg: '#f5f5f5', border: '#bdbdbd', text: '#424242', badge: '평 —' },
+  '흉(凶)':     { bg: '#fce4ec', border: '#f44336', text: '#b71c1c', badge: '흉 ✕' },
+};
+
+const JEOL_KR = [
+  '', '1월 소한(小寒)', '2월 입춘(立春)', '3월 경칩(驚蟄)', '4월 청명(淸明)',
+  '5월 입하(立夏)', '6월 망종(芒種)', '7월 소서(小暑)', '8월 입추(立秋)',
+  '9월 백로(白露)', '10월 한로(寒露)', '11월 입동(立冬)', '12월 대설(大雪)'
+];
+
+function JpjMonthlySection({ monthlyAnalysis, gyeokInfo }) {
+  if (!monthlyAnalysis?.length) return null;
+  // monthlyAnalysis는 역순(12→1)으로 오므로 오름차순 정렬
+  const sorted = [...monthlyAnalysis].sort((a, b) => a.month - b.month);
+
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      {/* 헤더 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        marginBottom: '14px', padding: '12px 18px',
+        background: 'linear-gradient(135deg, #1a237e, #4a148c)',
+        borderRadius: '16px', color: 'white'
+      }}>
+        <div>
+          <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>📅 자평진전 기준 절운(節運) 12개월</div>
+          <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: '2px' }}>
+            {gyeokInfo?.gyeok} · 용신/희신/기신 교차 분석
+          </div>
+        </div>
+      </div>
+
+      {/* 12개월 카드 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {sorted.map((m) => {
+          const eff = EFFECT_STYLE[m.effect] || EFFECT_STYLE['평(平)'];
+          return (
+            <div key={m.month} style={{
+              padding: '14px 16px',
+              borderRadius: '14px',
+              background: eff.bg,
+              border: `1px solid ${eff.border}`,
+            }}>
+              {/* 월 헤더 행 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: '700', fontSize: '0.9rem', color: eff.text, minWidth: '130px' }}>
+                  {JEOL_KR[m.month]}
+                </span>
+                <span style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-primary)' }}>{m.pillar}</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  ({m.stemGod} · {m.branchGod})
+                </span>
+                <span style={{
+                  marginLeft: 'auto',
+                  padding: '3px 10px', borderRadius: '10px',
+                  background: 'white', border: `1px solid ${eff.border}`,
+                  color: eff.text, fontWeight: '700', fontSize: '0.82rem'
+                }}>
+                  {eff.badge}
+                </span>
+              </div>
+
+              {/* 자평진전 해설 */}
+              <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6', wordBreak: 'keep-all' }}>
+                {m.jpjDesc}
+              </p>
+
+              {/* 장간 세부 */}
+              {m.hiddenDesc && (
+                <p style={{ margin: '5px 0 0', fontSize: '0.82rem', color: eff.text, opacity: 0.85, lineHeight: '1.5' }}>
+                  ※ {m.hiddenDesc}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function SajuInterpretation({ sajuData, userInfo, selectedSewunYear, selectedDaewunAge, onReset }) {
   const { language } = useLanguage();
@@ -70,12 +155,13 @@ export default function SajuInterpretation({ sajuData, userInfo, selectedSewunYe
   let fullAnalysis = null;
   try { fullAnalysis = getFullAnalysis(sajuData); } catch (e) { console.error('종합분석 오류:', e); }
 
-  // 자평진전 분석 — luck에서 대운/세운 기둥 추출
+  // 자평진전 분석 — luck에서 대운/세운 기둥 추출 + 절운 12개월 전달
   let jpjData = null;
   try {
-    const daewunPillar = luck?.daewun?.pillar || null;
-    const sewunPillar  = luck?.sewun?.pillar  || null;
-    jpjData = getJpjFullAnalysis(sajuData, daewunPillar, sewunPillar);
+    const daewunPillar  = luck?.daewun?.pillar || null;
+    const sewunPillar   = luck?.sewun?.pillar  || null;
+    const monthlyPillars = calculateWolun(sajuData.yearPillarHanja?.[0]);
+    jpjData = getJpjFullAnalysis(sajuData, daewunPillar, sewunPillar, monthlyPillars);
   } catch (e) { console.error('자평진전 분석 오류:', e); }
 
   if (!interpretation && !luck && !personality) return null;
@@ -255,125 +341,9 @@ export default function SajuInterpretation({ sajuData, userInfo, selectedSewunYe
         </div>
       )}
 
-      {/* ③ 자평진전 해설 */}
-      {interpretation && (
-        <>
-          <div className="interpretation-card" style={{ marginBottom: '20px', padding: '20px', backgroundColor: 'var(--surface-color)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
-              <h4 style={{ color: 'var(--text-primary)', margin: 0, fontWeight: '600', display: 'flex', alignItems: 'center', fontSize: '1.1rem' }}>
-                {t.japyungTitle}
-              </h4>
-              {language !== 'ko' && (
-                <button onClick={() => handleTranslate(`자평진전 격국론\n\n[${interpretation.gyeok}격]: ${interpretation.japyung}`)} style={{ padding: '6px 12px', background: 'var(--bg-color)', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}>
-                  {t.translateBtn}
-                </button>
-              )}
-            </div>
-            <p className="interpretation-text" style={{ lineHeight: '1.8', color: 'var(--text-secondary)', fontSize: '0.95rem', wordBreak: 'keep-all' }}>
-              <strong>[{interpretation.gyeok}격]</strong>: {interpretation.japyung}
-            </p>
-          </div>
-
-          <div className="interpretation-card" style={{ marginBottom: '20px', padding: '20px', backgroundColor: 'var(--surface-color)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
-              <h4 style={{ color: 'var(--text-primary)', margin: 0, fontWeight: '600', display: 'flex', alignItems: 'center', fontSize: '1.1rem' }}>
-                {t.yeonhaeTitle}
-              </h4>
-              {language !== 'ko' && (
-                <button onClick={() => handleTranslate(`연해자평 기준 성정 및 운세\n\n${interpretation.yeonhae}`)} style={{ padding: '6px 12px', background: 'var(--bg-color)', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}>
-                  {t.translateBtn}
-                </button>
-              )}
-            </div>
-            <p className="interpretation-text" style={{ lineHeight: '1.8', color: 'var(--text-secondary)', fontSize: '0.95rem', wordBreak: 'keep-all' }}>
-              {interpretation.yeonhae}
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* ③ 운세 흐름 해설 (luck null 체크) */}
-      {luck && luck.daewun && (
-        <div className="luck-flow-card" style={{ marginBottom: '20px', padding: '20px', backgroundColor: 'var(--surface-color)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-            <h4 style={{ color: 'var(--text-primary)', margin: 0, fontWeight: '600', fontSize: '1.1rem' }}>
-              {t.daewunDesc} — {luck.daewun.age}{t.ageSuffix} 
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 'normal', marginLeft: '8px' }}>
-                ({(userInfo.birthDate.includes('-') ? parseInt(userInfo.birthDate.split('-')[0]) : parseInt(userInfo.birthDate.substring(0, 4))) + luck.daewun.age}년 ~ {(userInfo.birthDate.includes('-') ? parseInt(userInfo.birthDate.split('-')[0]) : parseInt(userInfo.birthDate.substring(0, 4))) + luck.daewun.age + 9}년)
-              </span>
-              <div style={{ marginTop: '4px', fontSize: '1rem', color: 'var(--text-primary)' }}>
-                {luck.daewun.pillar} {luck.daewun.god}운
-              </div>
-            </h4>
-            {language !== 'ko' && (
-              <button onClick={() => handleTranslate(`대운 해설\n\n[자평진전 관점]\n${luck.daewun.japyung}\n\n[연해자평 관점]\n${luck.daewun.yeonhae}`)} style={{ padding: '6px 12px', background: 'var(--bg-color)', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}>
-                {t.translateBtn}
-              </button>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ padding: '16px', backgroundColor: 'var(--bg-color)', borderRadius: '12px' }}>
-              <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>자평진전 관점</strong>
-              <p className="luck-desc" style={{ marginTop: '6px', color: 'var(--text-secondary)', lineHeight: '1.7', wordBreak: 'keep-all' }}>{luck.daewun.japyung}</p>
-            </div>
-            <div style={{ padding: '16px', backgroundColor: 'var(--bg-color)', borderRadius: '12px' }}>
-              <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>연해자평 관점</strong>
-              <p className="luck-desc" style={{ marginTop: '6px', color: 'var(--text-secondary)', lineHeight: '1.7', wordBreak: 'keep-all' }}>{luck.daewun.yeonhae}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {luck && luck.sewun && (
-        <div className="luck-flow-card" style={{ marginBottom: '20px', padding: '20px', backgroundColor: 'var(--surface-color)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-            <h4 style={{ color: 'var(--text-primary)', margin: 0, fontWeight: '600', fontSize: '1.1rem' }}>
-              {t.sewunDesc} — {luck.sewun.year}{language === 'ko' ? '년' : ''} ({luck.sewun.pillar} {luck.sewun.god}운)
-            </h4>
-            {language !== 'ko' && (
-              <button onClick={() => handleTranslate(`세운 해설\n\n[자평진전 관점]\n${luck.sewun.japyung}\n\n[연해자평 관점]\n${luck.sewun.yeonhae}`)} style={{ padding: '6px 12px', background: 'var(--bg-color)', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}>
-                {t.translateBtn}
-              </button>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ padding: '16px', backgroundColor: 'var(--bg-color)', borderRadius: '12px' }}>
-              <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>자평진전 관점</strong>
-              <p className="luck-desc" style={{ marginTop: '6px', color: 'var(--text-secondary)', lineHeight: '1.7', wordBreak: 'keep-all' }}>{luck.sewun.japyung}</p>
-            </div>
-            <div style={{ padding: '16px', backgroundColor: 'var(--bg-color)', borderRadius: '12px' }}>
-              <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>연해자평 관점</strong>
-              <p className="luck-desc" style={{ marginTop: '6px', color: 'var(--text-secondary)', lineHeight: '1.7', wordBreak: 'keep-all' }}>{luck.sewun.yeonhae}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {luck && luck.monthlyLuck && luck.monthlyLuck.length > 0 && (
-        <div className="luck-flow-card" style={{ marginBottom: '25px', padding: '20px', backgroundColor: 'var(--surface-color)', borderRadius: '20px', border: '1px solid var(--border-color)', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
-            <h4 style={{ color: 'var(--text-primary)', margin: 0, fontWeight: '600', fontSize: '1.1rem' }}>
-              {t.wolunDesc}
-            </h4>
-            {language !== 'ko' && (
-              <button onClick={() => handleTranslate(`월운 상세 해설\n\n${luck.monthlyLuck.map(ml => `[${language === 'ko' ? `${ml.month}월` : monthEn[ml.month]}]\n${ml.desc}`).join('\n\n')}`)} style={{ padding: '6px 12px', background: 'var(--bg-color)', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '500' }}>
-                {t.translateBtn}
-              </button>
-            )}
-          </div>
-          <div className="monthly-grid" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', paddingRight: '5px' }}>
-            {luck.monthlyLuck.map((ml, idx) => (
-              <div key={idx} style={{ padding: '16px', backgroundColor: 'var(--bg-color)', borderRadius: '12px' }}>
-                <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{language === 'ko' ? `${ml.month}월` : monthEn[ml.month]} ({ml.pillar} {ml.god}운)</strong>
-                <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', fontSize: '0.95rem', margin: 0, wordBreak: 'keep-all' }}>
-                    {ml.desc}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* ③ 자평진전 기준 절운(節運) 12개월 */}
+      {jpjData?.monthlyAnalysis?.length > 0 && (
+        <JpjMonthlySection monthlyAnalysis={jpjData.monthlyAnalysis} gyeokInfo={jpjData.gyeokInfo} />
       )}
 
       {/* 🤖 AI 명리학 전문가 심층 분석 프롬프트 생성기 */}

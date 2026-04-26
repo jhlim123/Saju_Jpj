@@ -809,12 +809,84 @@ export const analyzeLuckAndGyeok = (sajuData, gyeokInfo, yongshinInfo, luckPilla
 };
 
 
+// ===== 자평진전 기준 절운(節運) 12개월 분석 =====
+
+// 절기 이름 (사주월 1~12)
+const JEOLGI_NAMES = [
+  '', '소한(小寒)', '입춘(立春)', '경칩(驚蟄)', '청명(淸明)',
+  '입하(立夏)', '망종(芒種)', '소서(小暑)', '입추(立秋)',
+  '백로(白露)', '한로(寒露)', '입동(立冬)', '대설(大雪)'
+];
+
+/**
+ * 자평진전 기준 절운 12개월 분석
+ * monthlyPillars: [{month, jeolgi, pillar, stem, branch}, ...]  ← calculateWolun() 결과
+ */
+export const analyzeJpjMonthly = (sajuData, gyeokInfo, yongshinInfo, monthlyPillars) => {
+  if (!monthlyPillars?.length || !yongshinInfo) return [];
+
+  return monthlyPillars.map(m => {
+    const analysis = analyzeLuckAndGyeok(sajuData, gyeokInfo, yongshinInfo, m.pillar, '절운');
+
+    // 월지 장간의 용신/기신 교차 분석
+    const ds = sajuData?.dayPillarHanja?.[0];
+    const branchHidden = HIDDEN_STEMS[m.branch] || [];
+    const branchGods = branchHidden.map(h => getTenGods(ds, h.stem)).filter(Boolean);
+
+    // 절기 기반 길흉 강화 설명
+    const stemGod = getTenGods(ds, m.stem);
+    const branchGod = getTenGods(ds, m.branch);
+    const yong = yongshinInfo.yongshin || '';
+    const hee  = yongshinInfo.heeishin || '';
+    const gi   = yongshinInfo.gishin   || '';
+
+    // 장간 중 용신·희신·기신 포함 여부
+    const hasYong = branchGods.some(g => yong.includes(g));
+    const hasHee  = branchGods.some(g => hee.includes(g));
+    const hasGi   = branchGods.some(g => gi.includes(g));
+
+    let jpjDesc = '';
+    if (analysis?.isYong || hasYong) {
+      jpjDesc = `${m.pillar}운은 용신에 해당합니다. 격국을 강화하는 달로 중요한 일을 추진하기 좋습니다.`;
+    } else if (analysis?.isHee || hasHee) {
+      jpjDesc = `${m.pillar}운은 희신에 해당합니다. 격국을 보조하여 안정적이고 순탄한 달입니다.`;
+    } else if (analysis?.isGi || hasGi) {
+      jpjDesc = `${m.pillar}운은 기신에 해당합니다. 격국을 훼손할 수 있어 신중한 처신이 필요한 달입니다.`;
+    } else {
+      jpjDesc = `${m.pillar}운은 격국에 직접적 영향이 크지 않은 중립적인 달입니다.`;
+    }
+
+    // 장간 세부 해설
+    const hiddenDesc = branchGods.length > 0
+      ? `월지 ${m.branch} 장간(${branchGods.join('·')})이 격국과 교차합니다.`
+      : '';
+
+    return {
+      month: m.month,
+      jeolgi: m.jeolgi || JEOLGI_NAMES[m.month] || `${m.month}월`,
+      pillar: m.pillar,
+      stem: m.stem,
+      branch: m.branch,
+      stemGod,
+      branchGod,
+      branchGods,
+      effect: analysis?.effect || '평(平)',
+      jpjDesc,
+      hiddenDesc,
+      isYong: analysis?.isYong || hasYong,
+      isHee:  analysis?.isHee  || hasHee,
+      isGi:   analysis?.isGi   || hasGi,
+    };
+  });
+};
+
+
 // ===== 종합 자평진전 분석 =====
 
 /**
  * 자평진전 기준 전체 분석 통합 함수
  */
-export const getJpjFullAnalysis = (sajuData, selectedDaewunPillar, selectedSewunPillar) => {
+export const getJpjFullAnalysis = (sajuData, selectedDaewunPillar, selectedSewunPillar, monthlyPillars) => {
   if (!sajuData?.dayPillarHanja?.[0]) return null;
 
   try {
@@ -844,6 +916,11 @@ export const getJpjFullAnalysis = (sajuData, selectedDaewunPillar, selectedSewun
       ? analyzeLuckAndGyeok(sajuData, gyeokInfo, yongshin, selectedSewunPillar, '세운')
       : null;
 
+    // 8. 자평진전 기준 절운 12개월 분석
+    const monthlyAnalysis = monthlyPillars?.length
+      ? analyzeJpjMonthly(sajuData, gyeokInfo, yongshin, monthlyPillars)
+      : [];
+
     return {
       dmStrength,
       monthlyHidden,
@@ -851,7 +928,8 @@ export const getJpjFullAnalysis = (sajuData, selectedDaewunPillar, selectedSewun
       sungPae,
       yongshin,
       daewunAnalysis,
-      sewunAnalysis
+      sewunAnalysis,
+      monthlyAnalysis,
     };
   } catch (e) {
     console.error('JPJ 분석 오류:', e);
