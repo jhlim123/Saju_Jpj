@@ -8,12 +8,31 @@ import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations, translateTenGods } from '../utils/translations';
 
+// ── 모듈 레벨 renderColoredHanja (JpjMonthlySection에서도 사용) ──
+const renderColoredHanja = (char, label) => {
+  const elClass = getElementClass(char);
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '4px',
+      padding: '2px 8px', borderRadius: '8px',
+      backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)', fontSize: '0.9rem'
+    }}>
+      <span className={`saju-box-mini ${elClass}`} style={{
+        width: '24px', height: '24px', display: 'flex',
+        justifyContent: 'center', alignItems: 'center',
+        borderRadius: '6px', fontSize: '0.85rem', fontWeight: 'bold'
+      }}>{char}</span>
+      {label && <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: '500' }}>{label}</span>}
+    </span>
+  );
+};
+
 // ── 자평진전 절운 12개월 인라인 컴포넌트 ──
 const EFFECT_STYLE = {
-  '대길(大吉)': { bg: '#e8f5e9', border: '#4caf50', text: '#1b5e20', badge: '대길 ★' },
-  '길(吉)':     { bg: '#e3f2fd', border: '#2196f3', text: '#0d47a1', badge: '길 ▲' },
-  '평(平)':     { bg: '#f5f5f5', border: '#bdbdbd', text: '#424242', badge: '평 —' },
-  '흉(凶)':     { bg: '#fce4ec', border: '#f44336', text: '#b71c1c', badge: '흉 ✕' },
+  '대길(大吉)': { bg: '#e8f5e9', border: '#4caf50', text: '#1b5e20', badge: '대길(大吉)' },
+  '길(吉)':     { bg: '#e3f2fd', border: '#2196f3', text: '#0d47a1', badge: '길(吉)' },
+  '평(平)':     { bg: '#f5f5f5', border: '#bdbdbd', text: '#424242', badge: '평(平)' },
+  '흉(凶)':     { bg: '#fce4ec', border: '#f44336', text: '#b71c1c', badge: '흉(凶)' },
 };
 
 const JEOL_KR = [
@@ -24,23 +43,19 @@ const JEOL_KR = [
 
 function JpjMonthlySection({ monthlyAnalysis, gyeokInfo }) {
   if (!monthlyAnalysis?.length) return null;
-  // monthlyAnalysis는 역순(12→1)으로 오므로 오름차순 정렬
   const sorted = [...monthlyAnalysis].sort((a, b) => a.month - b.month);
 
   return (
     <div style={{ marginBottom: '24px' }}>
       {/* 헤더 */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
         marginBottom: '14px', padding: '12px 18px',
         background: 'linear-gradient(135deg, #1a237e, #4a148c)',
         borderRadius: '16px', color: 'white'
       }}>
-        <div>
-          <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>📅 자평진전 기준 절운(節運) 12개월</div>
-          <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: '2px' }}>
-            {gyeokInfo?.gyeok} · 용신/희신/기신 교차 분석
-          </div>
+        <div style={{ fontWeight: '700', fontSize: '1.1rem' }}>자평진전 기준 절운(節運) 12개월</div>
+        <div style={{ fontSize: '0.78rem', opacity: 0.85, marginTop: '2px' }}>
+          {gyeokInfo?.gyeok} · 용신/희신/기신 교차 분석
         </div>
       </div>
 
@@ -50,23 +65,23 @@ function JpjMonthlySection({ monthlyAnalysis, gyeokInfo }) {
           const eff = EFFECT_STYLE[m.effect] || EFFECT_STYLE['평(平)'];
           return (
             <div key={m.month} style={{
-              padding: '14px 16px',
-              borderRadius: '14px',
-              background: eff.bg,
-              border: `1px solid ${eff.border}`,
+              padding: '14px 16px', borderRadius: '14px',
+              background: eff.bg, border: `1px solid ${eff.border}`,
             }}>
               {/* 월 헤더 행 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
                 <span style={{ fontWeight: '700', fontSize: '0.9rem', color: eff.text, minWidth: '130px' }}>
                   {JEOL_KR[m.month]}
                 </span>
-                <span style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-primary)' }}>{m.pillar}</span>
+                <span style={{ display: 'inline-flex', gap: '3px' }}>
+                  {renderColoredHanja(m.stem)}
+                  {renderColoredHanja(m.branch)}
+                </span>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   ({m.stemGod} · {m.branchGod})
                 </span>
                 <span style={{
-                  marginLeft: 'auto',
-                  padding: '3px 10px', borderRadius: '10px',
+                  marginLeft: 'auto', padding: '3px 10px', borderRadius: '10px',
                   background: 'white', border: `1px solid ${eff.border}`,
                   color: eff.text, fontWeight: '700', fontSize: '0.82rem'
                 }}>
@@ -82,7 +97,7 @@ function JpjMonthlySection({ monthlyAnalysis, gyeokInfo }) {
               {/* 장간 세부 */}
               {m.hiddenDesc && (
                 <p style={{ margin: '5px 0 0', fontSize: '0.82rem', color: eff.text, opacity: 0.85, lineHeight: '1.5' }}>
-                  ※ {m.hiddenDesc}
+                  {m.hiddenDesc}
                 </p>
               )}
             </div>
@@ -115,34 +130,6 @@ export default function SajuInterpretation({ sajuData, userInfo, selectedSewunYe
     '水': { bg: 'var(--water-bg)', text: 'var(--water-text)' }
   };
 
-  const renderColoredHanja = (char, label) => {
-    const elClass = getElementClass(char);
-    return (
-      <span style={{ 
-        display: 'inline-flex', 
-        alignItems: 'center', 
-        gap: '4px',
-        padding: '2px 8px',
-        borderRadius: '8px',
-        backgroundColor: 'var(--bg-color)',
-        border: '1px solid var(--border-color)',
-        fontSize: '0.9rem'
-      }}>
-        <span className={`saju-box-mini ${elClass}`} style={{ 
-          width: '24px', 
-          height: '24px', 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          borderRadius: '6px',
-          fontSize: '0.85rem',
-          fontWeight: 'bold'
-        }}>{char}</span>
-        {label && <span style={{ fontSize: '0.8rem', color: 'var(--text-primary)', fontWeight: '500' }}>{label}</span>}
-      </span>
-    );
-  };
-
   if (!sajuData || !userInfo) return null;
 
   let interpretation = null;
@@ -171,9 +158,6 @@ export default function SajuInterpretation({ sajuData, userInfo, selectedSewunYe
       <h3 className="section-title" style={{ fontSize: '1.3rem', fontWeight: 'bold', borderLeft: '5px solid #3b82f6', paddingLeft: '12px', marginBottom: '20px', color: '#1e293b' }}>
         {t.analysisTitle}
       </h3>
-
-      {/* ★ 자평진전(子平真詮) 격국 분석 — 최상단 배치 */}
-      {jpjData && <JpjSection jpjData={jpjData} />}
 
       {/* ① 성격 풀이 - 일간 + 월지 + 조후 */}
       {personality && (
@@ -341,7 +325,10 @@ export default function SajuInterpretation({ sajuData, userInfo, selectedSewunYe
         </div>
       )}
 
-      {/* ③ 자평진전 기준 절운(節運) 12개월 */}
+      {/* ③ 자평진전(子平真詮) 격국 분석 */}
+      {jpjData && <JpjSection jpjData={jpjData} renderHanja={renderColoredHanja} />}
+
+      {/* ④ 자평진전 기준 절운(節運) 12개월 */}
       {jpjData?.monthlyAnalysis?.length > 0 && (
         <JpjMonthlySection monthlyAnalysis={jpjData.monthlyAnalysis} gyeokInfo={jpjData.gyeokInfo} />
       )}
